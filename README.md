@@ -1,4 +1,5 @@
 # CareLoop Clinics — No-Show Guard
+Repository link : https://github.com/SharveshV/Careloop-Clinics
 
 An end-to-end capstone project analyzing missed appointments across eight outpatient clinics in six Indian cities. The workflow cleans booking data, investigates no-show patterns with MySQL, builds an appointment risk model, and uses Gemini to structure call-centre notes into follow-up reasons.
 
