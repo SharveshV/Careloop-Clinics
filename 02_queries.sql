@@ -1,0 +1,93 @@
+USE noshowguard
+
+
+INSERT INTO appointments (
+  appointment_id, patient_id, clinic_id, booked_on, appt_date,
+  age, gender, distance_km, fee_inr, booking_channel,
+  visit_type, reminder_sent, prior_no_shows, `status`,
+  lead_days, no_show
+)
+VALUES (
+  'A0002','P199','C01', '2025-01-24', '2025-01-25',
+  60.0, 'F', 18.0, 850, 'Phone', 'Consultation',
+  'Yes', 1, 'No_Show', 1, 1
+);
+Error Code: 1062. Duplicate entry 'A0002' for key 'appointments.PRIMARY'
+
+
+SELECT c.clinic_name,c.city,COUNT(a.appointment_id) AS appointments,
+SUM(a.no_show) as no_show,
+ROUND(100.0 * SUM(a.no_show)/ COUNT(a.appointment_id), 1) AS no_show_pct
+FROM clinics c JOIN appointments a on c.clinic_id = a.clinic_id
+GROUP BY c.clinic_id HAVING appointments >= 95 
+ORDER BY no_show_pct DESC;
+
+SELECT 
+    CASE 
+       WHEN lead_days BETWEEN 1 AND 7 THEN '1-7'
+	   WHEN lead_days BETWEEN 8 AND 14 THEN '8-14'
+	   WHEN lead_days BETWEEN 15 AND 30 THEN '15-30'
+       WHEN lead_days  >= 31 THEN  '31+'
+	END AS time_lead_band,
+    COUNT(*) AS appointments,
+    SUM(no_show) AS no_show,
+    ROUND(100.0 * SUM(a.no_show)/ COUNT(a.appointment_id), 1) AS no_show_pct
+    FROM appointments a
+    WHERE lead_days>0
+    GROUP BY time_lead_band
+    ORDER BY MIN(lead_days);
+   
+    WITH monthly AS (
+    SELECT 
+        SUBSTR(appt_date, 1, 7) AS `month`,
+        COUNT(*) AS appointments,
+        SUM(a.no_show) AS no_show    
+    FROM appointments a
+    GROUP BY `month`
+),
+calculated_rates AS (
+    SELECT 
+        `month`,
+        Appointments,
+        ROUND(100.0 * no_show / Appointments, 1) AS no_show_pct
+    FROM monthly
+)
+SELECT 
+    `month`,
+    Appointments,
+    no_show_pct,   
+    ROUND(no_show_pct - LAG(no_show_pct) OVER (ORDER BY `month`), 1) AS pct_point_change
+FROM calculated_rates
+ORDER BY `month`;
+
+
+WITH clinic_rates AS (
+    SELECT     
+        c.clinic_id,
+        c.clinic_name,
+        c.city,
+        COUNT(a.appointment_id) AS Appointments,
+        SUM(no_show) AS no_show,
+        ROUND(100.0 * SUM(no_show) / COUNT(a.appointment_id), 1) AS no_show_pct,
+        RANK() OVER (PARTITION BY c.city ORDER BY ROUND(100.0 * SUM(no_show) / COUNT(a.appointment_id), 1) DESC) AS rank_in_city
+    FROM clinics AS c 
+    INNER JOIN appointments AS a ON c.clinic_id = a.clinic_id 
+    GROUP BY c.clinic_id, c.clinic_name, c.city
+)
+SELECT 
+    clinic_name,
+    city,
+    no_show_pct,
+    rank_in_city AS `rank`,
+    CASE 
+        WHEN no_show_pct > (SELECT ROUND(100.0 * SUM(no_show) / COUNT(*), 1) FROM appointments) THEN 'above'
+        WHEN no_show_pct < (SELECT ROUND(100.0 * SUM(no_show) / COUNT(*), 1) FROM appointments) THEN 'below'
+        ELSE 'equal'
+    END AS vs_overall
+FROM clinic_rates
+ORDER BY city, rank_in_city;
+
+
+
+
+
